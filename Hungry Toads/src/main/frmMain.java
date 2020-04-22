@@ -6,6 +6,7 @@
 package main;
 
 import java.awt.Image;
+import java.util.concurrent.Semaphore;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.ImageIcon;
@@ -18,6 +19,7 @@ import javax.swing.JLabel;
 public class frmMain extends javax.swing.JFrame {
     
     private boolean hayMosca = false;
+    private final Semaphore mutex = new Semaphore(1, true);
     private Naturaleza ecosistema = new Naturaleza();
 
     /**
@@ -55,13 +57,20 @@ public class frmMain extends javax.swing.JFrame {
                     Thread.sleep(10000); // 10 segundos para generar una mosca
                 } catch (InterruptedException ex) {
                     Logger.getLogger(frmMain.class.getName()).log(Level.SEVERE, null, ex);
-                }// cambio de imagen en la hoja
+                }
+                try {
+                    mutex.acquire();
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(frmMain.class.getName()).log(Level.SEVERE, null, ex);
+                }
+                // cambio de imagen en la hoja
                 Image img = new ImageIcon(this.getClass().getResource("/imagenes/HojaMosca.png")).getImage();
                 img = img.getScaledInstance(63, 69,  java.awt.Image.SCALE_SMOOTH);
                 imgLeaf.setIcon(new ImageIcon(img));
                 // fin de cambio en imagen
                 hayMosca = true; // notifica a los sapos que ya hay mosca en la hoja
                 lblEstadoHoja.setText("Hay mosca");
+                mutex.release();
             }
         }
     }
@@ -74,22 +83,30 @@ public class frmMain extends javax.swing.JFrame {
         
         @Override
         public void run(){
-            while(true){
+            while(this.moscasDevoradas < 5){
                 while (hayMosca==false) // mientras no haya mosca debe esperar
                     estado.setText("Esperando...");
+                try {
+                    mutex.acquire();
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(frmMain.class.getName()).log(Level.SEVERE, null, ex);
+                }
                 estado.setText("Voy a atrapar la mosca");
                 try {
                     Thread.sleep(100); // una decima de segundo para arrojar la lengua
                 } catch (InterruptedException ex) {
                     Logger.getLogger(frmMain.class.getName()).log(Level.SEVERE, null, ex);
                 }
-                tengoMosca = true; // me sirve para poder comer
-                hayMosca = false; // ya no hay mosca en la hoja
-                // cambio de imagen en la hoja
-                Image img = new ImageIcon(this.getClass().getResource("/imagenes/Hoja.png")).getImage();
-                img = img.getScaledInstance(63, 69,  java.awt.Image.SCALE_SMOOTH);
-                imgLeaf.setIcon(new ImageIcon(img));
+                if (hayMosca){ // leo la variable para saber si sigue disponible la mosca
+                    tengoMosca = true; // me sirve para poder comer
+                    hayMosca = false; // ya no hay mosca en la hoja
+                    // cambio de imagen en la hoja
+                    Image img = new ImageIcon(this.getClass().getResource("/imagenes/Hoja.png")).getImage();
+                    img = img.getScaledInstance(63, 69,  java.awt.Image.SCALE_SMOOTH);
+                    imgLeaf.setIcon(new ImageIcon(img));
+                }
                 lblEstadoHoja.setText("No hay mosca");
+                mutex.release();
                 if (tengoMosca) // Si tengo una mosca, voy a comer
                     this.comer();
             }
@@ -105,6 +122,8 @@ public class frmMain extends javax.swing.JFrame {
             this.tengoMosca = false;
             this.moscasDevoradas++; // aumento mi cuenta de moscas devoradas
             this.contador.setText(String.valueOf(this.moscasDevoradas));
+            if (moscasDevoradas == 5)
+                this.estado.setText("Durmiendo...");
         }
     }
 
